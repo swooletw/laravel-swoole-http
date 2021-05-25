@@ -18,6 +18,7 @@ use SwooleTW\Http\Middleware\AccessLog;
 use SwooleTW\Http\Server\Facades\Server;
 use Illuminate\Contracts\Container\Container;
 use Symfony\Component\Console\Output\ConsoleOutput;
+use SwooleTW\Http\Process\CustomProcess;
 
 /**
  * @codeCoverageIgnore
@@ -134,7 +135,25 @@ class HttpServerCommand extends Command
             $manager->addProcess($this->getHotReloadProcess($server));
         }
 
+        //register custom process
+        $this->registerProcess($server);
+
         $manager->run();
+    }
+
+    /**
+     * @param \Swoole\WebSocket\Server $server
+     */
+    public function registerProcess($server)
+    {
+        $this->laravel->singleton(CustomProcess::class, function () {
+            return new CustomProcess();
+        });
+        $customProcess = $this->laravel->make(CustomProcess::class);
+        $processes = Arr::get($this->config, 'processes');
+        foreach ($processes as $process_class) {
+            $server->addProcess($customProcess->make($server, $process_class));
+        }
     }
 
     /**
@@ -251,7 +270,7 @@ class HttpServerCommand extends Command
     {
         $this->action = $this->argument('action');
 
-        if (! in_array($this->action, ['start', 'stop', 'restart', 'reload', 'infos'], true)) {
+        if (!in_array($this->action, ['start', 'stop', 'restart', 'reload', 'infos'], true)) {
             $this->error(
                 "Invalid argument '{$this->action}'. Expected 'start', 'stop', 'restart', 'reload' or 'infos'."
             );
@@ -291,7 +310,7 @@ class HttpServerCommand extends Command
     {
         $pids = $this->laravel->make(PidManager::class)->read();
 
-        if (! count($pids)) {
+        if (!count($pids)) {
             return false;
         }
 
@@ -300,11 +319,11 @@ class HttpServerCommand extends Command
 
         if ($managerPid) {
             // Swoole process mode
-            return $masterPid && $managerPid && Process::kill((int) $managerPid, 0);
+            return $masterPid && $managerPid && Process::kill((int)$managerPid, 0);
         }
 
         // Swoole base mode, no manager process
-        return $masterPid && Process::kill((int) $masterPid, 0);
+        return $masterPid && Process::kill((int)$masterPid, 0);
     }
 
     /**
@@ -356,13 +375,13 @@ class HttpServerCommand extends Command
             exit(1);
         }
 
-        if (! extension_loaded('swoole')) {
+        if (!extension_loaded('swoole')) {
             $this->error('Can\'t detect Swoole extension installed.');
 
             exit(1);
         }
 
-        if (! version_compare(swoole_version(), '4.3.1', 'ge')) {
+        if (!version_compare(swoole_version(), '4.3.1', 'ge')) {
             $this->error('Your Swoole version must be higher than `4.3.1`.');
 
             exit(1);
